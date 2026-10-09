@@ -57,7 +57,7 @@ async function fetchMore(){
  if(fetching)return;fetching=true;
  for(let t=0;t<5;t++){
   try{
-   const q=`mediatype:movies AND (title:commercial OR subject:commercial OR subject:advertisement) AND ${R(CATS)}`;
+   const q=`mediatype:movies AND (title:commercial OR subject:commercial OR subject:advertisement) AND ${R(CATS)} AND item_size:[1 TO 40000000]`;
    const pg=1+Math.floor(Math.random()*(t<2?6:1));
    const r=await fetch(`https://archive.org/advancedsearch.php?q=${encodeURIComponent(q)}&fl[]=identifier&fl[]=title&rows=20&page=${pg}&output=json`);
    if(!r.ok){status('取得エラー HTTP '+r.status);continue}
@@ -79,16 +79,20 @@ async function play(card){
  if(left<4)fetchMore();
  try{
   const j=await (await fetch('https://archive.org/metadata/'+card.dataset.id)).json();
-  const f=(j.files||[]).filter(x=>/\.mp4$/i.test(x.name)).sort((a,b)=>(+a.size||1e12)-(+b.size||1e12))[0];
+  const f=(j.files||[]).filter(x=>/\.mp4$/i.test(x.name)&&(+x.size||0)<40000000).sort((a,b)=>(+a.size||1e12)-(+b.size||1e12))[0];
   if(cur!==card)return;
   if(!f){skipLater('再生できる動画がありません');return}
   const vd=document.createElement('video');
   vd.setAttribute('muted','');vd.setAttribute('playsinline','');vd.setAttribute('webkit-playsinline','');
   vd.preload='auto';vd.muted=muted;vd.playsInline=true;
-  vd.poster='https://archive.org/services/img/'+card.dataset.id;
   vd.src=`https://archive.org/download/${card.dataset.id}/${encodeURIComponent(f.name)}`;
-  vd.onloadedmetadata=()=>{if(vd.duration>120)vd.currentTime=Math.random()*(vd.duration-40)};
-  vd.onplaying=()=>note.remove();
+  let started=false,lastT=-1,bad=0,age=0;
+  vd.onplaying=()=>{started=true;note.remove()};
+  const wd=setInterval(()=>{age+=3;
+   if(cur!==card){clearInterval(wd);return}
+   if(!started){if(age>=15){clearInterval(wd);skipLater('読み込めませんでした')}return}
+   if(!vd.paused&&!vd.ended&&vd.currentTime===lastT){if(++bad>=2){clearInterval(wd);next()}}else bad=0;
+   lastT=vd.currentTime},3000);
   vd.onended=next;
   vd.onerror=()=>skipLater('動画エラー('+(vd.error?vd.error.code:'?')+')');
   stage.insertBefore(vd,note);
@@ -100,6 +104,6 @@ function next(){const n=cur&&cur.nextElementSibling;if(n)n.scrollIntoView({behav
 const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting&&e.target!==cur)play(e.target)}),{root:feed,threshold:.6});
 setInterval(()=>{if(!cur)return;const s=(Date.now()-t0)/1000,k=cur.querySelector('.skip');
  if(s>=5){k.classList.add('ready');k.textContent='スキップ ▶'}else k.textContent='あと'+Math.ceil(5-s)+'秒';
- if(s>=30)next()},200);
+ if(s>=25)next()},500);
 fetchMore();
 </script></body></html>

@@ -22,6 +22,7 @@ html,body{margin:0;height:100%;background:#000;color:#fff;font-family:system-ui,
 #hud{position:fixed;top:calc(env(safe-area-inset-top,0px) + 10px);right:12px;z-index:5;background:#000a;border-radius:20px;padding:4px 12px;font-size:12px}
 #msg{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;scroll-snap-align:start;text-align:center;padding:0 24px}
 #msg button{background:#fff;color:#000;border:0;border-radius:8px;padding:10px 18px;font-weight:700}
+.note{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:14px;z-index:1;pointer-events:none;text-shadow:0 1px 6px #000}
 </style></head><body>
 <div id="hud">見た広告: <b id="cnt">0</b>本</div>
 <div id="feed"><div id="msg"><span id="st">広告を取得中…</span></div></div>
@@ -71,20 +72,29 @@ async function fetchMore(){
 async function play(card){
  if(cur)cur.querySelector('.stage').innerHTML='';
  cur=card;t0=Date.now();cnt.textContent=++seen;
+ const stage=card.querySelector('.stage');
+ const note=document.createElement('div');note.className='note';note.textContent='読み込み中…';stage.appendChild(note);
+ const skipLater=m=>{note.textContent=m;setTimeout(()=>{if(cur===card)next()},2000)};
  let left=0,n=card;while((n=n.nextElementSibling))left++;
  if(left<4)fetchMore();
  try{
   const j=await (await fetch('https://archive.org/metadata/'+card.dataset.id)).json();
   const f=(j.files||[]).filter(x=>/\.mp4$/i.test(x.name)).sort((a,b)=>(+a.size||1e12)-(+b.size||1e12))[0];
-  if(!f)throw 0;
   if(cur!==card)return;
+  if(!f){skipLater('再生できる動画がありません');return}
   const vd=document.createElement('video');
+  vd.setAttribute('muted','');vd.setAttribute('playsinline','');vd.setAttribute('webkit-playsinline','');
+  vd.preload='auto';vd.muted=muted;vd.playsInline=true;
+  vd.poster='https://archive.org/services/img/'+card.dataset.id;
   vd.src=`https://archive.org/download/${card.dataset.id}/${encodeURIComponent(f.name)}`;
-  vd.muted=muted;vd.autoplay=true;vd.playsInline=true;
   vd.onloadedmetadata=()=>{if(vd.duration>120)vd.currentTime=Math.random()*(vd.duration-40)};
-  vd.onended=next;vd.onerror=next;
-  card.querySelector('.stage').appendChild(vd);vd.play().catch(()=>{});
- }catch(e){next()}}
+  vd.onplaying=()=>note.remove();
+  vd.onended=next;
+  vd.onerror=()=>skipLater('動画エラー('+(vd.error?vd.error.code:'?')+')');
+  stage.insertBefore(vd,note);
+  vd.play().catch(()=>{note.textContent='タップして再生';stage.onclick=()=>{vd.play();stage.onclick=null}});
+  setTimeout(()=>{if(cur===card&&note.isConnected&&note.textContent==='読み込み中…')note.textContent='読み込みに時間がかかっています…'},6000);
+ }catch(e){skipLater('取得エラー: '+e.message)}}
 function next(){const n=cur&&cur.nextElementSibling;if(n)n.scrollIntoView({behavior:'smooth'});else fetchMore()}
 
 const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting&&e.target!==cur)play(e.target)}),{root:feed,threshold:.6});

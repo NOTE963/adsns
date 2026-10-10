@@ -29,6 +29,7 @@ html,body{margin:0;height:100%;background:#000;color:#fff;font-family:system-ui,
 <script>
 // 取得元: Internet Archive(キー不要・埋め込み制限なし)の広告(コマーシャル)動画。ジャンルをランダムに切り替えて無限取得
 const CATS=["car","automobile","soda","cola","candy","cereal","coffee","toy","soap","detergent","airline","bank","insurance","fashion","shoes","computer","video game","appliance","television","radio","perfume","hotel","travel","pizza","burger","snack","shampoo","camera","watch","motorcycle","pet food","beer","chocolate","telephone","vacuum","refrigerator","jeans","cosmetics","tire","gasoline"];
+const JAPAN_ONLY=true; // trueで日本の広告を優先(0件のときだけ世界の広告にもどる)
 const feed=document.getElementById('feed'),cnt=document.getElementById('cnt');
 let seen=0,cur=null,t0=0,muted=true,fetching=false;
 const ids=new Set();
@@ -57,8 +58,10 @@ async function fetchMore(){
  if(fetching)return;fetching=true;
  for(let t=0;t<5;t++){
   try{
-   const q=`mediatype:movies AND (title:commercial OR subject:commercial OR subject:advertisement) AND ${R(CATS)} AND item_size:[1 TO 40000000]`;
-   const pg=1+Math.floor(Math.random()*(t<2?6:1));
+   const jp=JAPAN_ONLY&&t<3;
+   const base=jp?'(title:CM OR title:commercial OR title:コマーシャル OR title:広告 OR subject:commercial OR subject:CM OR subject:advertisement) AND (japan OR japanese OR 日本 OR 昭和 OR 平成 OR nippon)':'(title:commercial OR subject:commercial OR subject:advertisement)';
+   const q=`mediatype:movies AND ${base}${(t%2===1||!jp)?' AND '+R(CATS):''} AND item_size:[1 TO 40000000]`;
+   const pg=1+Math.floor(Math.random()*(t<2?3:1));
    const r=await fetch(`https://archive.org/advancedsearch.php?q=${encodeURIComponent(q)}&fl[]=identifier&fl[]=title&rows=20&page=${pg}&output=json`);
    if(!r.ok){status('取得エラー HTTP '+r.status);continue}
    const docs=((await r.json()).response||{}).docs||[];
